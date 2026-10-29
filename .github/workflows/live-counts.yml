@@ -1,0 +1,24 @@
+name: live-counts
+# Renames the Discord GAMES category + game channels with the live Roblox player counts.
+# Discord allows ~2 renames per channel per 10 min, so every 10 minutes. The bot token is the repo secret DISCORD_BOT_TOKEN.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+concurrency:
+  group: live-counts
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python live_counts.py
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          PYTHONIOENCODING: utf-8
