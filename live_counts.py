@@ -20,14 +20,24 @@ GAMES = {
     "🪖・tank-wars": 10773125906,
 }
 CAT_BASE = "🎮 GAMES"
+VISITS_PREFIX = "📈 "  # locked voice channel at the top of GAMES: "📈 61.4K Total Visits" (created on first run)
+CONNECT = 1 << 20
 SUFFIX = re.compile(r"・🟢\d+$")
 
 
-def playing() -> dict:
+def stats() -> tuple:
     ids = ",".join(str(u) for u in GAMES.values())
     r = requests.get(f"https://games.roblox.com/v1/games?universeIds={ids}", timeout=15)
     r.raise_for_status()
-    return {g["id"]: int(g.get("playing") or 0) for g in r.json()["data"]}
+    data = r.json()["data"]
+    return {g["id"]: int(g.get("playing") or 0) for g in data}, sum(int(g.get("visits") or 0) for g in data)
+
+
+def short(n: int) -> str:
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if n >= div:
+            return f"{n / div:.1f}".rstrip("0").rstrip(".") + suf
+    return str(n)
 
 
 def rename(cid: str, name: str) -> bool:
@@ -40,7 +50,7 @@ def rename(cid: str, name: str) -> bool:
 
 
 def run_once():
-    counts = playing()
+    counts, visits = stats()
     chans = requests.get(f"{API}/guilds/{GID}/channels", headers=H, timeout=15).json()
     total = 0
     for c in chans:
@@ -51,12 +61,22 @@ def run_once():
             want = f"{base}・🟢{n}"
             if c["name"] != want:
                 print("rename", c["name"], "->", want, "ok" if rename(c["id"], want) else "")
-    for c in chans:
-        if c["type"] == 4 and c["name"].startswith(CAT_BASE):
-            want = f"{CAT_BASE} · 🟢 {total} PLAYING"
-            if c["name"] != want:
-                print("rename category ->", want, "ok" if rename(c["id"], want) else "")
-    print(time.strftime("%H:%M"), "total playing", total, {k: counts.get(v, 0) for k, v in GAMES.items()})
+    cat = next((c for c in chans if c["type"] == 4 and c["name"].startswith(CAT_BASE)), None)
+    if cat:
+        want = f"{CAT_BASE} · 🟢 {total} PLAYING"
+        if cat["name"] != want:
+            print("rename category ->", want, "ok" if rename(cat["id"], want) else "")
+        vname = f"{VISITS_PREFIX}{short(visits)} Total Visits"
+        vc = next((c for c in chans if c["type"] == 2 and c.get("parent_id") == cat["id"] and c["name"].startswith(VISITS_PREFIX)), None)
+        if not vc:
+            r = requests.post(f"{API}/guilds/{GID}/channels", headers=H, timeout=15, json={
+                "name": vname, "type": 2, "parent_id": cat["id"], "position": 0,
+                "permission_overwrites": [{"id": GID, "type": 0, "allow": "0", "deny": str(CONNECT)}]})
+            r.raise_for_status()
+            print("created", vname)
+        elif vc["name"] != vname:
+            print("rename visits ->", vname, "ok" if rename(vc["id"], vname) else "")
+    print(time.strftime("%H:%M"), "total playing", total, "visits", visits, {k: counts.get(v, 0) for k, v in GAMES.items()})
 
 
 if __name__ == "__main__":
