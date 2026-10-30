@@ -2,7 +2,7 @@
 
   🎮 GAMES · 🟢 57 PLAYING        🚗・the-big-drive・🟢41
 One run = one update (fetch counts from games.roblox.com, rename only what changed). Discord allows ~2 renames per channel per
-10 minutes, so run it every 10 minutes (Windows Task Scheduler) or with --loop (sleeps 10 min between runs).
+10 minutes, so it runs with --loop (sleeps 10 min between runs; --minutes N stops after N minutes).
 Token: env DISCORD_BOT_TOKEN (never printed).
 """
 import os, re, sys, time
@@ -81,11 +81,17 @@ def run_once():
 
 if __name__ == "__main__":
     if "--loop" in sys.argv:
+        # --minutes N: stop after N minutes (the GitHub job loops ~5.5 h, then starts its next run itself)
+        mins = float(sys.argv[sys.argv.index("--minutes") + 1]) if "--minutes" in sys.argv else float("inf")
+        deadline = time.time() + mins * 60
         while True:
             try:
                 run_once()
             except Exception as e:  # keep looping through network hiccups
                 print("error:", e)
+            sys.stdout.flush()
+            if time.time() + 600 > deadline:
+                break
             time.sleep(600)
     else:
         run_once()
